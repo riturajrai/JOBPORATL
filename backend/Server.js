@@ -7,7 +7,7 @@ const path = require("path");
 const postRoutes = require("./controllers/Post");
 const getUserRoutes = require("./controllers/Get");
 const ProfileData = require("./controllers/Put");
-const DeleteRouter = require('./controllers/delete.JS');
+const DeleteRouter = require("./controllers/Remove");
 
 const app = express();
 
@@ -27,10 +27,9 @@ app.use("/api", getUserRoutes);
 app.use("/api", ProfileData);
 app.use("/api", DeleteRouter);
 
-const PORT = process.env.PORT || 5000;
-const HOST = "0.0.0.0";
 
-app.listen(PORT, HOST, () => {
+const PORT = process.env.PORT || 8080;
+
+app.listen(PORT, () => {
   console.log(`🌍 Server is running at http://localhost:${PORT}`);
-  console.log('Server running on http://192.168.1.28:5000');
 });
