@@ -144,27 +144,55 @@ router.get("/jobs/:id/status", authenticateToken, async (req, res) => {
 //-----------------------------------------------------------------
 // Fetch User Profile
 //-----------------------------------------------------------------
-router.get("/user/:id", authenticateToken, async (req, res) => {
-  const { id } = req.params;
-
+router.get("/users/:id", authenticateToken, async (req, res) => {
   try {
-    if (req.user.id !== parseInt(id)) {
+    const userId = parseInt(req.params.id);
+    if (req.user.id !== userId) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
     const [users] = await db.query(
-      "SELECT id AS user_id, name, location, email, phone, linkedin, github, resume_link, profile_pic, role FROM users WHERE id = ?",
-      [id]
+      `SELECT id AS user_id, name, location, email, phone, linkedin, github, resume_link, profile_pic, 
+              skills, hobbies, availability, preferred_job_type, role, portfolio, bio 
+       FROM users WHERE id = ?`,
+      [userId]
     );
+
     if (!users.length) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json(users[0]);
+    const [education] = await db.query(
+      "SELECT title, institution, year FROM user_education WHERE user_id = ?",
+      [userId]
+    );
+    const [experience] = await db.query(
+      "SELECT title, institution, year FROM user_experience WHERE user_id = ?",
+      [userId]
+    );
+    const [certifications] = await db.query(
+      "SELECT title, institution, year FROM user_certifications WHERE user_id = ?",
+      [userId]
+    );
+    const [languages] = await db.query(
+      "SELECT language FROM user_languages WHERE user_id = ?",
+      [userId]
+    );
+
+    const userData = {
+      ...users[0],
+      education,
+      experience,
+      certifications,
+      languages: languages.map((lang) => lang.language), // Flatten to array of strings
+    };
+
+    res.json(userData);
   } catch (error) {
-    handleError(res, error, "Failed to fetch user");
+    handleError(res, error, "Failed to fetch user profile");
   }
 });
+
 
 //-----------------------------------------------------------------
 // Fetch Candidate Profile (Simplified)
