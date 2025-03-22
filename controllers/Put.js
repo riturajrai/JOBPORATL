@@ -147,6 +147,55 @@ Router.put("/companyprofile/:userId", authenticateToken, async (req, res) => {
 //-----------------------------------------------------------------
 // Update User Profile
 //-----------------------------------------------------------------
+Router.get("/users/:id", authenticateToken, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    if (req.user.id !== userId) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const [users] = await db.query(
+      `SELECT id AS user_id, name, location, email, phone, linkedin, github, resume_link, profile_pic, 
+              skills, hobbies, availability, preferred_job_type, role, portfolio, bio 
+       FROM users WHERE id = ?`,
+      [userId]
+    );
+
+    if (!users.length) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const [education] = await db.query(
+      "SELECT title, institution, year FROM user_education WHERE user_id = ?",
+      [userId]
+    );
+    const [experience] = await db.query(
+      "SELECT title, institution, year FROM user_experience WHERE user_id = ?",
+      [userId]
+    );
+    const [certifications] = await db.query(
+      "SELECT title, institution, year FROM user_certifications WHERE user_id = ?",
+      [userId]
+    );
+    const [languages] = await db.query(
+      "SELECT language FROM user_languages WHERE user_id = ?",
+      [userId]
+    );
+
+    const userData = {
+      ...users[0],
+      education,
+      experience,
+      certifications,
+      languages: languages.map((lang) => lang.language),
+    };
+
+    res.json(userData);
+  } catch (error) {
+    handleError(res, error, "Failed to fetch user profile");
+  }
+});
+
 Router.put(
   "/users/:id",
   authenticateToken,
@@ -165,8 +214,22 @@ Router.put(
       }
 
       const {
-        name, location, email, phone, linkedin, github, skills, hobbies, availability,
-        preferred_job_type, portfolio, bio, education, experience, certifications, languages,
+        name,
+        location,
+        email,
+        phone,
+        linkedin,
+        github,
+        skills,
+        hobbies,
+        availability,
+        preferred_job_type,
+        portfolio,
+        bio,
+        education,
+        experience,
+        certifications,
+        languages,
       } = req.body;
 
       const resumeFile = req.files && req.files["resume"] ? req.files["resume"][0] : null;
@@ -184,6 +247,18 @@ Router.put(
       }
 
       const existingUser = existingUsers[0];
+
+      // Parse skills from JSON string to comma-separated string
+      let skillsToSave = null;
+      if (skills) {
+        try {
+          const skillsArray = JSON.parse(skills); // Parse the JSON string: ["JavaScript", "Node.js", "React"]
+          skillsToSave = skillsArray.join(","); // Convert to comma-separated: "JavaScript,Node.js,React"
+        } catch (error) {
+          return res.status(400).json({ message: "Invalid skills format" });
+        }
+      }
+
       const updatedFields = {
         name: name || existingUser.name,
         location: location || existingUser.location,
@@ -193,7 +268,7 @@ Router.put(
         github: github || existingUser.github || null,
         resume_link: resumeFile ? `/uploads/resumes/${resumeFile.filename}` : existingUser.resume_link,
         profile_pic: profilePicFile ? `/uploads/profile_pics/${profilePicFile.filename}` : existingUser.profile_pic,
-        skills: skills || existingUser.skills || null,
+        skills: skillsToSave !== null ? skillsToSave : existingUser.skills || null,
         hobbies: hobbies || existingUser.hobbies || null,
         availability: availability || existingUser.availability || null,
         preferred_job_type: preferred_job_type || existingUser.preferred_job_type || null,
@@ -209,10 +284,21 @@ Router.put(
              availability = ?, preferred_job_type = ?, portfolio = ?, bio = ?
          WHERE id = ?`,
         [
-          updatedFields.name, updatedFields.location, updatedFields.email, updatedFields.phone,
-          updatedFields.linkedin, updatedFields.github, updatedFields.resume_link, updatedFields.profile_pic,
-          updatedFields.skills, updatedFields.hobbies, updatedFields.availability, updatedFields.preferred_job_type,
-          updatedFields.portfolio, updatedFields.bio, userId,
+          updatedFields.name,
+          updatedFields.location,
+          updatedFields.email,
+          updatedFields.phone,
+          updatedFields.linkedin,
+          updatedFields.github,
+          updatedFields.resume_link,
+          updatedFields.profile_pic,
+          updatedFields.skills,
+          updatedFields.hobbies,
+          updatedFields.availability,
+          updatedFields.preferred_job_type,
+          updatedFields.portfolio,
+          updatedFields.bio,
+          userId,
         ]
       );
 
@@ -271,10 +357,22 @@ Router.put(
          FROM users WHERE id = ?`,
         [userId]
       );
-      const [updatedEducation] = await db.query("SELECT title, institution, year FROM user_education WHERE user_id = ?", [userId]);
-      const [updatedExperience] = await db.query("SELECT title, institution, year FROM user_experience WHERE user_id = ?", [userId]);
-      const [updatedCertifications] = await db.query("SELECT title, institution, year FROM user_certifications WHERE user_id = ?", [userId]);
-      const [updatedLanguages] = await db.query("SELECT language FROM user_languages WHERE user_id = ?", [userId]);
+      const [updatedEducation] = await db.query(
+        "SELECT title, institution, year FROM user_education WHERE user_id = ?",
+        [userId]
+      );
+      const [updatedExperience] = await db.query(
+        "SELECT title, institution, year FROM user_experience WHERE user_id = ?",
+        [userId]
+      );
+      const [updatedCertifications] = await db.query(
+        "SELECT title, institution, year FROM user_certifications WHERE user_id = ?",
+        [userId]
+      );
+      const [updatedLanguages] = await db.query(
+        "SELECT language FROM user_languages WHERE user_id = ?",
+        [userId]
+      );
 
       const fullUserData = {
         ...updatedUsers[0],
