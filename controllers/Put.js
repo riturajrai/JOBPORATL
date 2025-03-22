@@ -150,8 +150,8 @@ Router.put("/companyprofile/:userId", authenticateToken, async (req, res) => {
 Router.put(
   "/users/:id",
   authenticateToken,
-  upload.fields([{ name: "resume", maxCount: 1 }, { name: "profile_pic", maxCount: 1 }]), // Handle multiple file types
-  validateUserUpdate, // Apply validation rules
+  upload.fields([{ name: "resume", maxCount: 1 }, { name: "profile_pic", maxCount: 1 }]),
+  validateUserUpdate,
   async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
@@ -161,15 +161,22 @@ Router.put(
 
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() }); // Return validation errors
+        return res.status(400).json({ errors: errors.array() });
       }
 
-      const { name, location, email, phone, linkedin, github } = req.body;
+      const {
+        name, location, email, phone, linkedin, github, skills, hobbies, availability,
+        preferred_job_type, portfolio, bio, education, experience, certifications, languages,
+      } = req.body;
+
       const resumeFile = req.files && req.files["resume"] ? req.files["resume"][0] : null;
       const profilePicFile = req.files && req.files["profile_pic"] ? req.files["profile_pic"][0] : null;
 
+      // Fetch existing user data
       const [existingUsers] = await db.query(
-        "SELECT name, location, email, phone, linkedin, github, resume_link, profile_pic FROM users WHERE id = ?",
+        `SELECT name, location, email, phone, linkedin, github, resume_link, profile_pic, 
+                skills, hobbies, availability, preferred_job_type, portfolio, bio 
+         FROM users WHERE id = ?`,
         [userId]
       );
       if (!existingUsers.length) {
@@ -186,26 +193,98 @@ Router.put(
         github: github || existingUser.github || null,
         resume_link: resumeFile ? `/uploads/resumes/${resumeFile.filename}` : existingUser.resume_link,
         profile_pic: profilePicFile ? `/uploads/profile_pics/${profilePicFile.filename}` : existingUser.profile_pic,
+        skills: skills || existingUser.skills || null,
+        hobbies: hobbies || existingUser.hobbies || null,
+        availability: availability || existingUser.availability || null,
+        preferred_job_type: preferred_job_type || existingUser.preferred_job_type || null,
+        portfolio: portfolio || existingUser.portfolio || null,
+        bio: bio || existingUser.bio || null,
       };
 
+      // Update users table
       await db.query(
         `UPDATE users 
          SET name = ?, location = ?, email = ?, phone = ?, linkedin = ?, github = ?, 
-             resume_link = ?, profile_pic = ?
+             resume_link = ?, profile_pic = ?, skills = ?, hobbies = ?, 
+             availability = ?, preferred_job_type = ?, portfolio = ?, bio = ?
          WHERE id = ?`,
         [
           updatedFields.name, updatedFields.location, updatedFields.email, updatedFields.phone,
           updatedFields.linkedin, updatedFields.github, updatedFields.resume_link, updatedFields.profile_pic,
-          userId,
+          updatedFields.skills, updatedFields.hobbies, updatedFields.availability, updatedFields.preferred_job_type,
+          updatedFields.portfolio, updatedFields.bio, userId,
         ]
       );
 
+      // Update education (delete old, insert new)
+      await db.query("DELETE FROM user_education WHERE user_id = ?", [userId]);
+      if (education) {
+        const educationArray = JSON.parse(education);
+        for (const edu of educationArray) {
+          await db.query(
+            "INSERT INTO user_education (user_id, title, institution, year) VALUES (?, ?, ?, ?)",
+            [userId, edu.title, edu.institution, edu.year]
+          );
+        }
+      }
+
+      // Update experience (delete old, insert new)
+      await db.query("DELETE FROM user_experience WHERE user_id = ?", [userId]);
+      if (experience) {
+        const experienceArray = JSON.parse(experience);
+        for (const exp of experienceArray) {
+          await db.query(
+            "INSERT INTO user_experience (user_id, title, institution, year) VALUES (?, ?, ?, ?)",
+            [userId, exp.title, exp.institution, exp.year]
+          );
+        }
+      }
+
+      // Update certifications (delete old, insert new)
+      await db.query("DELETE FROM user_certifications WHERE user_id = ?", [userId]);
+      if (certifications) {
+        const certArray = JSON.parse(certifications);
+        for (const cert of certArray) {
+          await db.query(
+            "INSERT INTO user_certifications (user_id, title, institution, year) VALUES (?, ?, ?, ?)",
+            [userId, cert.title, cert.institution, cert.year]
+          );
+        }
+      }
+
+      // Update languages (delete old, insert new)
+      await db.query("DELETE FROM user_languages WHERE user_id = ?", [userId]);
+      if (languages) {
+        const langArray = JSON.parse(languages);
+        for (const lang of langArray) {
+          await db.query(
+            "INSERT INTO user_languages (user_id, language) VALUES (?, ?)",
+            [userId, lang]
+          );
+        }
+      }
+
+      // Fetch updated user data
       const [updatedUsers] = await db.query(
-        "SELECT id AS user_id, name, location, email, phone, linkedin, github, resume_link, profile_pic, role FROM users WHERE id = ?",
+        `SELECT id AS user_id, name, location, email, phone, linkedin, github, resume_link, profile_pic, 
+                skills, hobbies, availability, preferred_job_type, role, portfolio, bio 
+         FROM users WHERE id = ?`,
         [userId]
       );
+      const [updatedEducation] = await db.query("SELECT title, institution, year FROM user_education WHERE user_id = ?", [userId]);
+      const [updatedExperience] = await db.query("SELECT title, institution, year FROM user_experience WHERE user_id = ?", [userId]);
+      const [updatedCertifications] = await db.query("SELECT title, institution, year FROM user_certifications WHERE user_id = ?", [userId]);
+      const [updatedLanguages] = await db.query("SELECT language FROM user_languages WHERE user_id = ?", [userId]);
 
-      res.json({ message: "Profile updated successfully", user: updatedUsers[0] });
+      const fullUserData = {
+        ...updatedUsers[0],
+        education: updatedEducation,
+        experience: updatedExperience,
+        certifications: updatedCertifications,
+        languages: updatedLanguages.map((lang) => lang.language),
+      };
+
+      res.json({ message: "Profile updated successfully", user: fullUserData });
     } catch (error) {
       handleError(res, error, "Failed to update profile");
     }
